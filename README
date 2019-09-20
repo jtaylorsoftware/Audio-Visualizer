@@ -1,0 +1,3 @@
+Audio visualizer using PulseAudio C API and OpenGL.
+
+Currently only records and displays audio data from the default device.
