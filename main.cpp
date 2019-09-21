@@ -117,9 +117,10 @@ private:
 
 const double FPS_LIMIT = 1.0 / 60.0;
 const size_t SAMPLE_RATE = 44100;
-const size_t BUFSIZE = size_t(SAMPLE_RATE * FPS_LIMIT) + 2 - size_t(SAMPLE_RATE * FPS_LIMIT) % 2;
+const size_t AUDIO_FRAMEBUF_SIZE = (size_t(SAMPLE_RATE * FPS_LIMIT) + 2 - size_t(SAMPLE_RATE * FPS_LIMIT) % 2);
 const size_t WIN_WIDTH = 640;
 const size_t WIN_HEIGHT = 480;
+const size_t BYTES_PER_VALUE = 2;
 
 int main(int argc, char *argv[])
 {
@@ -208,7 +209,8 @@ int main(int argc, char *argv[])
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
 
-    size_t numPoints = SAMPLE_RATE * 3;
+    // reserve enough space upfront for 1 second of audio with an extra 1 frame buffer
+    const size_t numPoints = SAMPLE_RATE + SAMPLE_RATE * FPS_LIMIT;
     std::vector<glm::vec2> channelValues0;
     // std::vector<glm::vec2> channelValues1;
     channelValues0.reserve(numPoints);
@@ -284,8 +286,9 @@ int main(int argc, char *argv[])
         deltaTime += (currentTime - lastTime) / fpsLimit;
         lastTime = currentTime;
 
-        uint8_t buf[BUFSIZE];
-        
+        uint8_t buf[AUDIO_FRAMEBUF_SIZE];
+
+        // this operation controls framerate because it's blocking
         if (pa_simple_read(paStream->GetStream(), buf, sizeof(buf), &error) < 0)
         {
             std::cerr << "pa_simple_read error: " << pa_strerror(error) << std::endl;
@@ -295,8 +298,8 @@ int main(int argc, char *argv[])
         // Copy data to vertex buffers
         // each value should be 1/SAMPLE_RATE ahead?
         std::vector<glm::vec2> channelValuesPerFrame0;
-        channelValuesPerFrame0.reserve(BUFSIZE / 2);
-        for (int i = 0; i < BUFSIZE; i += 2)
+        channelValuesPerFrame0.reserve(AUDIO_FRAMEBUF_SIZE / BYTES_PER_VALUE);
+        for (int i = 0; i < AUDIO_FRAMEBUF_SIZE; i += BYTES_PER_VALUE) // read a 16 byte value and store it
         {
             PCM16 s1 = BytesToPcm16(buf[i + 1], buf[i]);
             //PCM16 s2 = BytesToPcm16(buf[i + 2], buf[i + 3]);
@@ -306,12 +309,12 @@ int main(int argc, char *argv[])
             channelValues0.push_back(pos);
             channelValuesPerFrame0.push_back(pos);
             count += 1;
-            xPosition += 1.0f / SAMPLE_RATE;
+            xPosition += float(BYTES_PER_VALUE) / SAMPLE_RATE;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo0);
-        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(glm::vec2) * BUFSIZE / 2, channelValuesPerFrame0.data());
-        offset += sizeof(glm::vec2) * BUFSIZE / 2;
+        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(glm::vec2) * AUDIO_FRAMEBUF_SIZE / 2, channelValuesPerFrame0.data());
+        offset += sizeof(glm::vec2) * AUDIO_FRAMEBUF_SIZE / 2;
 
         glUseProgram(program);
 
@@ -327,16 +330,20 @@ int main(int argc, char *argv[])
             std::cout << "Fps: " << numFrames << std::endl;
             numFrames = 0;
         }
-        if (channelValues0.size() >= numPoints)
+        
+        if (xPosition >= 1.0f)
         {
+            // wrap x position around
             xPosition = -1.0f;
+
             offset = 0;
             count = 0;
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // ensure clear
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // ensure clear framebuffer
+            // reset the data storage
             glBindBuffer(GL_ARRAY_BUFFER, vbo0);
             glBufferSubData(GL_ARRAY_BUFFER, offset, numPoints, nullptr);
             channelValues0.clear();
-            std::cout << "secondsSinceReset" << std::endl;
+            std::cout << "x position wrapped" << std::endl;
             secondsSinceReset = 0;
         }
 
