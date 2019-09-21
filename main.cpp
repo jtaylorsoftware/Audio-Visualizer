@@ -15,10 +15,6 @@
 #include <memory>
 #include <vector>
 
-#define BUFSIZE 1024
-
-// #define RECORD_TIME 5.0f
-
 typedef signed short PCM16;
 
 // Normalize Signed 16 bit value
@@ -119,9 +115,15 @@ private:
     pa_simple *stream;
 };
 
+const double FPS_LIMIT = 1.0 / 60.0;
+const size_t SAMPLE_RATE = 44100;
+const size_t BUFSIZE = size_t(SAMPLE_RATE * FPS_LIMIT) + 2 - size_t(SAMPLE_RATE * FPS_LIMIT) % 2;
+const size_t WIN_WIDTH = 640;
+const size_t WIN_HEIGHT = 480;
+
 int main(int argc, char *argv[])
 {
-    const pa_sample_spec sampleSpec = {PA_SAMPLE_S16LE, 44100, 1};
+    const pa_sample_spec sampleSpec = {PA_SAMPLE_S16LE, SAMPLE_RATE, 1};
     std::unique_ptr<PaSimpleStream> paStream(new PaSimpleStream(nullptr));
 
     int error;
@@ -138,7 +140,7 @@ int main(int argc, char *argv[])
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    window = glfwCreateWindow(640, 480, "hellopulse", NULL, NULL);
+    window = glfwCreateWindow(WIN_WIDTH, WIN_HEIGHT, "hellopulse", NULL, NULL);
     if (!window)
     {
         std::cerr << "failed to init window" << std::endl;
@@ -206,11 +208,11 @@ int main(int argc, char *argv[])
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
 
-    size_t numPoints = 44100 * 5; // enough values for 5 seconds of audio
+    size_t numPoints = SAMPLE_RATE * 3;
     std::vector<glm::vec2> channelValues0;
-    std::vector<glm::vec2> channelValues1;
+    // std::vector<glm::vec2> channelValues1;
     channelValues0.reserve(numPoints);
-    channelValues1.reserve(numPoints);
+    // channelValues1.reserve(numPoints);
 
     // vbo for first channel
     GLuint vbo0;
@@ -224,15 +226,15 @@ int main(int argc, char *argv[])
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * numPoints, nullptr, GL_DYNAMIC_DRAW);
 
     // vbo for second channel
-    GLuint vbo1;
-    glGenBuffers(1, &vbo1);
-    if (vbo1 == 0)
-    {
-        std::cerr << "vbo created with id 0" << std::endl;
-        return EXIT_FAILURE;
-    }
-    glBindBuffer(GL_ARRAY_BUFFER, vbo1);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * numPoints, nullptr, GL_DYNAMIC_DRAW);
+    // GLuint vbo1;
+    // glGenBuffers(1, &vbo1);
+    // if (vbo1 == 0)
+    // {
+    //     std::cerr << "vbo created with id 0" << std::endl;
+    //     return EXIT_FAILURE;
+    // }
+    // glBindBuffer(GL_ARRAY_BUFFER, vbo1);
+    // glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * numPoints, nullptr, GL_DYNAMIC_DRAW);
 
     GLuint vao0 = 0;
     glGenVertexArrays(1, &vao0);
@@ -241,34 +243,21 @@ int main(int argc, char *argv[])
         std::cerr << "vao created with id 0" << std::endl;
         return EXIT_FAILURE;
     }
-    GLuint vao1 = 0;
-    glGenVertexArrays(1, &vao1);
-    if (vao1 == 0)
-    {
-        std::cerr << "vao created with id 0" << std::endl;
-        return EXIT_FAILURE;
-    }
+    // GLuint vao1 = 0;
+    // glGenVertexArrays(1, &vao1);
+    // if (vao1 == 0)
+    // {
+    //     std::cerr << "vao created with id 0" << std::endl;
+    //     return EXIT_FAILURE;
+    // }
 
     glBindVertexArray(vao0);
     glBindBuffer(GL_ARRAY_BUFFER, vbo0);
     glVertexAttribPointer(glGetAttribLocation(program, "position"), 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     glEnableVertexAttribArray(glGetAttribLocation(program, "position"));
 
-    glBindVertexArray(vao1);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo1);
-    glVertexAttribPointer(glGetAttribLocation(program, "position"), 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glEnableVertexAttribArray(glGetAttribLocation(program, "position"));
-
-    // std::vector<float> points = {
-    //     -0.5f, 0.5f,
-    //     -0.25f, -0.5f,
-    //     0.0f, 0.5f,
-    //     0.25f, -0.5f,
-    // };
-
-    // glBindVertexArray(vao);
-    // glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    // glBufferData(GL_ARRAY_BUFFER, 8 * sizeof(float), points.data(), GL_STATIC_DRAW);
+    // glBindVertexArray(vao1);
+    // glBindBuffer(GL_ARRAY_BUFFER, vbo1);
     // glVertexAttribPointer(glGetAttribLocation(program, "position"), 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     // glEnableVertexAttribArray(glGetAttribLocation(program, "position"));
 
@@ -278,7 +267,7 @@ int main(int argc, char *argv[])
     size_t offset = 0;
     size_t count = 0;
 
-    static double fpsLimit = 1.0 / 60.0;
+    double fpsLimit = 1.0 / 60.0;
     double lastTime = glfwGetTime();
     double timer = lastTime;
     double secondsSinceReset = 0;
@@ -296,7 +285,7 @@ int main(int argc, char *argv[])
         lastTime = currentTime;
 
         uint8_t buf[BUFSIZE];
-        /* Record some data ... */
+        
         if (pa_simple_read(paStream->GetStream(), buf, sizeof(buf), &error) < 0)
         {
             std::cerr << "pa_simple_read error: " << pa_strerror(error) << std::endl;
@@ -304,11 +293,10 @@ int main(int argc, char *argv[])
         }
 
         // Copy data to vertex buffers
-        // 1024 bufsize for 2 channels -> 512 bytes per channel -> 256 values per channel
-        // each value should be 1/44100 ahead?
+        // each value should be 1/SAMPLE_RATE ahead?
         std::vector<glm::vec2> channelValuesPerFrame0;
-        channelValuesPerFrame0.reserve(BUFSIZE / 4);
-        for (int i = 0; i < BUFSIZE; i += 4) // read every 4 bytes because 2 channels are interleaved
+        channelValuesPerFrame0.reserve(BUFSIZE / 2);
+        for (int i = 0; i < BUFSIZE; i += 2)
         {
             PCM16 s1 = BytesToPcm16(buf[i + 1], buf[i]);
             //PCM16 s2 = BytesToPcm16(buf[i + 2], buf[i + 3]);
@@ -318,23 +306,14 @@ int main(int argc, char *argv[])
             channelValues0.push_back(pos);
             channelValuesPerFrame0.push_back(pos);
             count += 1;
-            xPosition += 1 / 44100.0f;
+            xPosition += 1.0f / SAMPLE_RATE;
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo0);
-        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(glm::vec2) * BUFSIZE / 4, channelValuesPerFrame0.data());
-        offset += sizeof(glm::vec2) * BUFSIZE / 4;
-
-        // float x = xPosition;
-        // float y = yPosition;
-        // glm::vec2 pos(x, y);
-
-        // channelValues0.push_back({x, y});
+        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(glm::vec2) * BUFSIZE / 2, channelValuesPerFrame0.data());
+        offset += sizeof(glm::vec2) * BUFSIZE / 2;
 
         glUseProgram(program);
-
-        // glBindBuffer(GL_ARRAY_BUFFER, vbo0);
-        // glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(glm::vec2), glm::value_ptr(channelValues0[count]));
 
         glBindVertexArray(vao0);
         glUniform4f(colorUniform, 0.0f, 0.0f, 1.0f, 1.0f);
@@ -348,17 +327,16 @@ int main(int argc, char *argv[])
             std::cout << "Fps: " << numFrames << std::endl;
             numFrames = 0;
         }
-        if (secondsSinceReset >= 5.0)
+        if (channelValues0.size() >= numPoints)
         {
             xPosition = -1.0f;
-            // yPosition = 0.5f;
             offset = 0;
             count = 0;
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // ensure clear
             glBindBuffer(GL_ARRAY_BUFFER, vbo0);
             glBufferSubData(GL_ARRAY_BUFFER, offset, numPoints, nullptr);
             channelValues0.clear();
-            std::cout << "secondsSinceReset > 5" << std::endl;
+            std::cout << "secondsSinceReset" << std::endl;
             secondsSinceReset = 0;
         }
 
