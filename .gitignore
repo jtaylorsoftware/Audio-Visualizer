@@ -1,2 +1,11 @@
 # Build directory
 build/
+
+# Vscode settings
+.vscode/
+
+# glm
+glm/
+
+# glad
+glad/

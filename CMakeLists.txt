@@ -11,16 +11,14 @@ if( PulseAudio_INCLUDE_DIRS STREQUAL "" )
     return()
 endif()
 
-find_library(   PulseAudio_LIBRARIES
-                NAMES pulse
-                DOC "The PulseAudio library")
-
 if( PulseAudio_LIBRARIES STREQUAL "" )
     message("ERROR NO PULSEAUDIO LIBRARY FOUND")
     return()
 endif()
 
 find_package(glfw3 REQUIRED)
+
+find_package(Boost REQUIRED COMPONENTS thread)
 
 set(Glad_INCLUDE_DIRS "glad/include")
 set(Glad_SRC "glad/src/glad.c")
@@ -36,14 +34,16 @@ set_target_properties(  hellopulse PROPERTIES
                         CXX_STANDARD_REQUIRED YES)
 
 target_include_directories( hellopulse   
-                            PRIVATE
+                            PUBLIC
                             ${PulseAudio_INCLUDE_DIRS}
                             ${glfw3_INCLUDE_DIRS}
                             ${Glad_INCLUDE_DIRS}
-                            ${glm_INCLUDE_DIRS})
+                            ${glm_INCLUDE_DIRS}
+                            ${Boost_INCLUDE_DIRS})
 
 target_link_libraries(  hellopulse
-                        pulse-simple
-                        pulse
+                        dl 
                         glfw
-                        dl )
+                        pulse
+                        pulse-simple
+                        ${Boost_LIBRARIES})
